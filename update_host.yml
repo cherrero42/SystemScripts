@@ -1,0 +1,98 @@
+---
+# v1.01 29/02/24
+# v1.02 08/05/24
+
+
+
+
+---
+# @file update_host.yml
+# @brief Ansible playbook to update packages and log the process.
+# 
+# @details 
+# This playbook performs a series of tasks on the specified hosts to update the 
+# system packages and log the process to a designated folder. It is designed 
+# for systems with apt package management.
+#
+# @version 1.02
+# @date 08/05/24
+#
+# @version 1.01
+# @date 29/02/24
+#
+# @note Ensure that the target host(s) are correctly specified and accessible.
+# 
+# @param folder_logs The directory where log files will be saved.
+# @param hosts The hosts on which the playbook will be executed.
+# @param gather_facts Indicates whether to gather facts. Set to false to skip gathering.
+#
+# @task Get current date and time
+#   - @brief Captures the current date and time.
+#   - @details This timestamp is used to name log files uniquely.
+#
+# @task Update apt package cache
+#   - @brief Updates the apt package cache.
+#   - @details Ensures that the package list is up-to-date.
+#   - @privilege Requires elevated privileges to execute.
+#
+# @task Update package list
+#   - @brief Collects a list of installed packages.
+#   - @details Gathers package information using the appropriate package manager.
+#
+# @task Update all packages
+#   - @brief Upgrades all installed packages to their latest versions.
+#   - @details Applies all available updates for installed packages.
+#   - @privilege Requires elevated privileges to execute.
+#
+# @task Create custom log file
+#   - @brief Creates a log file containing the result of the package updates.
+#   - @details The log file is saved in JSON format to the specified directory.
+#
+# @task Add info to log file
+#   - @brief Appends update results to a persistent log file.
+#   - @details Logs the update time and result summary to a cumulative log file.
+#   - @note The log file is created if it does not exist.
+
+
+- name: Update host
+  hosts: r340
+  gather_facts: false
+  vars:
+    folder_logs: "/media/data/docker_backup"
+  tasks:
+    - name: Get current date and time
+      ansible.builtin.command: date +"%Y-%m-%d_%H-%M-%S"
+      register: current_datetime 
+
+    - name: Update apt package cache
+      become: yes
+      apt:
+        update_cache: yes
+  
+    - name: Update package list
+      package_facts:
+        manager: auto
+
+    - name: Update all packages
+      become: yes
+      package:
+        name: "*"
+        state: latest
+      register: update_result
+
+    - name: Create custom log file
+      copy:
+        content: "{{ update_result | to_nice_json }}"
+        dest: "{{folder_logs}}/log_update_packages_{{ current_datetime.stdout }}.json"
+
+    - name: Add info to log file
+      ansible.builtin.lineinfile:
+        path: "{{folder_logs}}/log_tasks_update.log"
+        insertafter: EOF
+        create: yes
+        line: "{{ item }}"
+      loop:
+        - "\n-------------------------------------------------------\n"
+        - "{{ current_datetime.stdout_lines }}"
+        - "{{ update_result | to_nice_json }}"
+  
